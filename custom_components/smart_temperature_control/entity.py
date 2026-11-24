@@ -47,7 +47,10 @@ class RoomEntity(Entity):
         area = area_entry.name if area_entry else None
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, room.id)},
-            name=f"Heizung {room.name}",
+            # Home Assistant puts the area in front of entity ids and names, so the
+            # room name is not repeated: climate.schlafzimmer_heizung, not
+            # climate.schlafzimmer_heizung_schlafzimmer.
+            name="Heizung",
             manufacturer="Smart Temperatur Control",
             model="Raum",
             suggested_area=area or room.name,

@@ -68,7 +68,7 @@ The card is registered automatically. Add it to a dashboard:
 
 ```yaml
 type: custom:stc-week-card
-entity: climate.heizung_schlafzimmer
+entity: climate.schlafzimmer_heizung
 ```
 
 Tap a cell to switch Komfort ↔ Eco. Several taps are collected and saved with one call of `smart_temperature_control.set_schedule` (7 strings of `k`/`e`, 48 slots of 30 min by default).

@@ -97,7 +97,7 @@ async def test_read_mode_computes_but_does_not_write(hass, setup):
     assert room.temperature.value == 19.4
     assert room.planned == ["climate.sz_1", "climate.sz_2"]
     assert calls["temp"] == []
-    st = hass.states.get("climate.heizung_schlafzimmer")
+    st = hass.states.get("climate.heizung")
     assert st is not None
     assert st.attributes["temperature"] == 20.0
     assert st.attributes["current_temperature"] == 19.4
@@ -106,7 +106,7 @@ async def test_read_mode_computes_but_does_not_write(hass, setup):
 
 async def test_control_writes_both_trvs_same_setpoint(hass, setup):
     entry, calls, _ = setup
-    await hass.services.async_call("switch", "turn_on", {"entity_id": "switch.heizung_schlafzimmer_control_thermostats"}, blocking=True)
+    await hass.services.async_call("switch", "turn_on", {"entity_id": "switch.heizung_control_thermostats"}, blocking=True)
     await hass.async_block_till_done()
     sent = sorted((c.data["entity_id"], c.data["temperature"]) for c in calls["temp"])
     assert sent == [("climate.sz_1", 20.0), ("climate.sz_2", 20.0)]
@@ -165,8 +165,8 @@ async def test_manual_change_holds_until_next_switch_and_can_be_saved(hass, setu
     assert room.decision.reason == "manual"
     assert room.decision.target == 22.0
     assert room.decision.until.hour == 22  # next schedule switch
-    assert hass.states.get("binary_sensor.heizung_schlafzimmer_manually_changed").state == "on"
-    await hass.services.async_call("button", "press", {"entity_id": "button.heizung_schlafzimmer_save_for_this_period"}, blocking=True)
+    assert hass.states.get("binary_sensor.heizung_manually_changed").state == "on"
+    await hass.services.async_call("button", "press", {"entity_id": "button.heizung_save_for_this_period"}, blocking=True)
     await hass.async_block_till_done()
     assert room.stored["comfort"] == 22.0
     assert room.override is None
@@ -192,7 +192,7 @@ async def test_house_mode_drives_rooms_and_heat_source(hass, setup):
 async def test_schedule_service(hass, setup):
     entry, _, _ = setup
     days = ["e" * 48] * 7
-    await hass.services.async_call(DOMAIN, "set_schedule", {"entity_id": "climate.heizung_schlafzimmer", "days": days}, blocking=True)
+    await hass.services.async_call(DOMAIN, "set_schedule", {"entity_id": "climate.heizung", "days": days}, blocking=True)
     await hass.async_block_till_done()
     room = _room(entry)
     assert room.decision.reason == "eco"

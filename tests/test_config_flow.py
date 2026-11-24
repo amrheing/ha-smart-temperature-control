@@ -26,7 +26,7 @@ async def test_house_and_room(hass):
     assert result["type"] is FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
     assert len(entry.subentries) == 1
-    assert hass.states.get("climate.heizung_buro") is not None
+    assert hass.states.get("climate.heizung") is not None
 
 
 async def test_single_instance(hass):

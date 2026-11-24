@@ -1,6 +1,6 @@
 // Smart Temperatur Control – week schedule card.
 // type: custom:stc-week-card
-// entity: climate.heizung_schlafzimmer
+// entity: climate.schlafzimmer_heizung
 const DAYS_DE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 
 class StcWeekCard extends HTMLElement {
