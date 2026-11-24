@@ -1,0 +1,233 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Smart Temperatur Control",
+        "description": "Creates the house. Add rooms afterwards with 'Add room'."
+      }
+    },
+    "abort": {
+      "already_configured": "Already configured.",
+      "single_instance_allowed": "Already configured."
+    }
+  },
+  "config_subentries": {
+    "room": {
+      "initiate_flow": {
+        "user": "Add room"
+      },
+      "entry_type": "Room",
+      "step": {
+        "user": {
+          "title": "Room",
+          "data": {
+            "name": "Room name",
+            "area": "Area",
+            "thermostats": "Thermostats",
+            "sensors": "Room temperature sensors",
+            "windows": "Window/door contacts",
+            "window_delay": "Window delay",
+            "profile": "Thermostat profile"
+          },
+          "data_description": {
+            "sensors": "Averaged; implausible or unavailable values are ignored. Without sensors the thermostats' own sensor is used.",
+            "window_delay": "Window must be open this long before the room is switched off.",
+            "profile": "Auto detects Danfoss Ally and Shelly TRV."
+          }
+        },
+        "reconfigure": {
+          "title": "Room",
+          "data": {
+            "name": "Room name",
+            "area": "Area",
+            "thermostats": "Thermostats",
+            "sensors": "Room temperature sensors",
+            "windows": "Window/door contacts",
+            "window_delay": "Window delay",
+            "profile": "Thermostat profile"
+          },
+          "data_description": {
+            "sensors": "Averaged; implausible or unavailable values are ignored. Without sensors the thermostats' own sensor is used.",
+            "window_delay": "Window must be open this long before the room is switched off.",
+            "profile": "Auto detects Danfoss Ally and Shelly TRV."
+          }
+        },
+        "external": {
+          "title": "External room sensor",
+          "description": "Number entities of the thermostats that receive the room temperature (pre-filled where found). Leave empty if the thermostats have none.",
+          "data": {
+            "external_inputs": "External temperature inputs"
+          }
+        }
+      },
+      "error": {
+        "no_thermostat": "Select at least one thermostat."
+      },
+      "abort": {
+        "reconfigure_successful": "Room updated."
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "House settings",
+        "data": {
+          "off_temperature": "Off temperature",
+          "external_interval": "External sensor interval",
+          "verify_delay": "Check after",
+          "retries": "Retries",
+          "sensor_min": "Sensor minimum",
+          "sensor_max": "Sensor maximum",
+          "sensor_max_jump": "Max jump within 5 min",
+          "sensor_stale": "Sensor stale after",
+          "notify_service": "Notify service (e.g. notify.mobile_app_x)",
+          "heat_source": "Heat source"
+        }
+      },
+      "heat_source": {
+        "title": "Heat source",
+        "description": "Option of the entity for each house mode (for a switch: on/off). Example KWB: the program select of the KWB Comfort 4 integration.",
+        "data": {
+          "heat_source_entity": "Entity",
+          "map_normal": "Normal",
+          "map_party": "Party",
+          "map_vacation": "Vacation",
+          "map_summer": "Summer"
+        }
+      }
+    }
+  },
+  "selector": {
+    "profile": {
+      "options": {
+        "auto": "Automatic",
+        "danfoss_ally": "Danfoss Ally",
+        "shelly_trv": "Shelly TRV / BLU TRV",
+        "generic": "Generic thermostat"
+      }
+    },
+    "heat_source": {
+      "options": {
+        "none": "None (rooms only)",
+        "entity": "Existing entity (select/switch)"
+      }
+    }
+  },
+  "entity": {
+    "climate": {
+      "room": {
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "plan": "Plan",
+              "comfort": "Comfort",
+              "eco": "Eco"
+            }
+          }
+        }
+      }
+    },
+    "switch": {
+      "on": {
+        "name": "Heating"
+      },
+      "schedule_enabled": {
+        "name": "Schedule"
+      },
+      "control": {
+        "name": "Control thermostats"
+      },
+      "summer": {
+        "name": "Summer mode"
+      },
+      "control_heat_source": {
+        "name": "Control heat source"
+      }
+    },
+    "number": {
+      "comfort": {
+        "name": "Comfort"
+      },
+      "eco": {
+        "name": "Eco"
+      }
+    },
+    "select": {
+      "house_mode": {
+        "name": "House mode",
+        "state": {
+          "normal": "Normal",
+          "party": "Party",
+          "vacation": "Vacation"
+        }
+      }
+    },
+    "datetime": {
+      "vacation_start": {
+        "name": "Vacation start"
+      },
+      "vacation_end": {
+        "name": "Vacation end"
+      }
+    },
+    "time": {
+      "party_until": {
+        "name": "Party until"
+      }
+    },
+    "sensor": {
+      "temperature": {
+        "name": "Room temperature"
+      },
+      "target": {
+        "name": "Setpoint"
+      },
+      "overview": {
+        "name": "Rooms heating"
+      }
+    },
+    "binary_sensor": {
+      "eco_period": {
+        "name": "Eco period"
+      },
+      "window": {
+        "name": "Window open"
+      },
+      "problem": {
+        "name": "Problem"
+      },
+      "manual": {
+        "name": "Manually changed"
+      }
+    },
+    "button": {
+      "back_to_plan": {
+        "name": "Back to plan"
+      },
+      "save_for_period": {
+        "name": "Save for this period"
+      },
+      "resend": {
+        "name": "Send now"
+      }
+    }
+  },
+  "exceptions": {
+    "invalid_schedule": {
+      "message": "Invalid schedule."
+    }
+  },
+  "services": {
+    "set_schedule": {
+      "name": "Set week schedule",
+      "description": "7 strings (Monday first) of 'k' (comfort) and 'e' (eco), 24, 48 or 96 slots each.",
+      "fields": {
+        "days": {
+          "name": "Days",
+          "description": "List of 7 day strings."
+        }
+      }
+    }
+  }
+}

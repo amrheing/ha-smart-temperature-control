@@ -1,0 +1,14 @@
+{
+  "domain": "smart_temperature_control",
+  "name": "Smart Temperatur Control",
+  "after_dependencies": ["frontend", "http"],
+  "codeowners": ["@amrheing"],
+  "config_flow": true,
+  "documentation": "https://github.com/amrheing/ha-smart-temperature-control",
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/amrheing/ha-smart-temperature-control/issues",
+  "loggers": ["custom_components.smart_temperature_control"],
+  "requirements": [],
+  "version": "0.1.0"
+}

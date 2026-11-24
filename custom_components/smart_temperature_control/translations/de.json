@@ -1,0 +1,233 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Smart Temperatur Control",
+        "description": "Legt das Haus an. Räume fügst du danach mit „Raum hinzufügen“ hinzu."
+      }
+    },
+    "abort": {
+      "already_configured": "Bereits eingerichtet.",
+      "single_instance_allowed": "Bereits eingerichtet."
+    }
+  },
+  "config_subentries": {
+    "room": {
+      "initiate_flow": {
+        "user": "Raum hinzufügen"
+      },
+      "entry_type": "Raum",
+      "step": {
+        "user": {
+          "title": "Raum",
+          "data": {
+            "name": "Raumname",
+            "area": "Bereich",
+            "thermostats": "Thermostate",
+            "sensors": "Raumtemperatur-Fühler",
+            "windows": "Fenster-/Türkontakte",
+            "window_delay": "Fenster-Verzögerung",
+            "profile": "Thermostat-Profil"
+          },
+          "data_description": {
+            "sensors": "Werden gemittelt; unplausible oder nicht verfügbare Werte werden ignoriert. Ohne Fühler gilt der Fühler der Thermostate.",
+            "window_delay": "So lange muss ein Fenster offen sein, bevor der Raum abgesenkt wird.",
+            "profile": "Automatisch erkennt Danfoss Ally und Shelly TRV."
+          }
+        },
+        "reconfigure": {
+          "title": "Raum",
+          "data": {
+            "name": "Raumname",
+            "area": "Bereich",
+            "thermostats": "Thermostate",
+            "sensors": "Raumtemperatur-Fühler",
+            "windows": "Fenster-/Türkontakte",
+            "window_delay": "Fenster-Verzögerung",
+            "profile": "Thermostat-Profil"
+          },
+          "data_description": {
+            "sensors": "Werden gemittelt; unplausible oder nicht verfügbare Werte werden ignoriert. Ohne Fühler gilt der Fühler der Thermostate.",
+            "window_delay": "So lange muss ein Fenster offen sein, bevor der Raum abgesenkt wird.",
+            "profile": "Automatisch erkennt Danfoss Ally und Shelly TRV."
+          }
+        },
+        "external": {
+          "title": "Externer Raumfühler",
+          "description": "Zahl-Entitäten der Thermostate, die die Raumtemperatur bekommen (vorausgefüllt, wenn gefunden). Leer lassen, wenn die Thermostate keine haben.",
+          "data": {
+            "external_inputs": "Eingänge externe Temperatur"
+          }
+        }
+      },
+      "error": {
+        "no_thermostat": "Mindestens ein Thermostat auswählen."
+      },
+      "abort": {
+        "reconfigure_successful": "Raum geändert."
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Einstellungen Haus",
+        "data": {
+          "off_temperature": "Aus-Temperatur",
+          "external_interval": "Intervall externer Fühler",
+          "verify_delay": "Prüfen nach",
+          "retries": "Wiederholungen",
+          "sensor_min": "Fühler Minimum",
+          "sensor_max": "Fühler Maximum",
+          "sensor_max_jump": "Max. Sprung in 5 min",
+          "sensor_stale": "Fühler veraltet nach",
+          "notify_service": "Benachrichtigung (z. B. notify.mobile_app_x)",
+          "heat_source": "Wärmeerzeuger"
+        }
+      },
+      "heat_source": {
+        "title": "Wärmeerzeuger",
+        "description": "Wert der Entität je Betriebsart (bei Schaltern: on/off). Beispiel KWB: die Programmauswahl der KWB-Comfort-4-Integration.",
+        "data": {
+          "heat_source_entity": "Entität",
+          "map_normal": "Normal",
+          "map_party": "Party",
+          "map_vacation": "Urlaub",
+          "map_summer": "Sommer"
+        }
+      }
+    }
+  },
+  "selector": {
+    "profile": {
+      "options": {
+        "auto": "Automatisch",
+        "danfoss_ally": "Danfoss Ally",
+        "shelly_trv": "Shelly TRV / BLU TRV",
+        "generic": "Allgemeines Thermostat"
+      }
+    },
+    "heat_source": {
+      "options": {
+        "none": "Keiner (nur Räume)",
+        "entity": "Vorhandene Entität (Auswahl/Schalter)"
+      }
+    }
+  },
+  "entity": {
+    "climate": {
+      "room": {
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "plan": "Plan",
+              "comfort": "Komfort",
+              "eco": "Eco"
+            }
+          }
+        }
+      }
+    },
+    "switch": {
+      "on": {
+        "name": "Heizung"
+      },
+      "schedule_enabled": {
+        "name": "Zeitplan"
+      },
+      "control": {
+        "name": "Thermostate steuern"
+      },
+      "summer": {
+        "name": "Sommerbetrieb"
+      },
+      "control_heat_source": {
+        "name": "Wärmeerzeuger steuern"
+      }
+    },
+    "number": {
+      "comfort": {
+        "name": "Komfort"
+      },
+      "eco": {
+        "name": "Eco"
+      }
+    },
+    "select": {
+      "house_mode": {
+        "name": "Betriebsart",
+        "state": {
+          "normal": "Normal",
+          "party": "Party",
+          "vacation": "Urlaub"
+        }
+      }
+    },
+    "datetime": {
+      "vacation_start": {
+        "name": "Urlaub ab"
+      },
+      "vacation_end": {
+        "name": "Urlaub bis"
+      }
+    },
+    "time": {
+      "party_until": {
+        "name": "Party bis"
+      }
+    },
+    "sensor": {
+      "temperature": {
+        "name": "Raumtemperatur"
+      },
+      "target": {
+        "name": "Sollwert"
+      },
+      "overview": {
+        "name": "Räume heizen"
+      }
+    },
+    "binary_sensor": {
+      "eco_period": {
+        "name": "Eco-Zeit"
+      },
+      "window": {
+        "name": "Fenster offen"
+      },
+      "problem": {
+        "name": "Problem"
+      },
+      "manual": {
+        "name": "Manuell geändert"
+      }
+    },
+    "button": {
+      "back_to_plan": {
+        "name": "Zurück zum Plan"
+      },
+      "save_for_period": {
+        "name": "Für diese Periode speichern"
+      },
+      "resend": {
+        "name": "Jetzt setzen"
+      }
+    }
+  },
+  "exceptions": {
+    "invalid_schedule": {
+      "message": "Ungültiger Zeitplan."
+    }
+  },
+  "services": {
+    "set_schedule": {
+      "name": "Wochenplan setzen",
+      "description": "7 Zeichenketten (Montag zuerst) aus 'k' (Komfort) und 'e' (Eco), je 24, 48 oder 96 Abschnitte.",
+      "fields": {
+        "days": {
+          "name": "Tage",
+          "description": "Liste mit 7 Tageszeilen."
+        }
+      }
+    }
+  }
+}

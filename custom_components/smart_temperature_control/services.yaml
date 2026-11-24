@@ -1,0 +1,11 @@
+set_schedule:
+  target:
+    entity:
+      integration: smart_temperature_control
+      domain: climate
+  fields:
+    days:
+      required: true
+      example: '["eeeeeeeeeeeekkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkeeee", "...", "...", "...", "...", "...", "..."]'
+      selector:
+        object:

@@ -1,0 +1,31 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  zip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set version from tag
+        run: |
+          tag="${{ github.event.release.tag_name || github.ref_name }}"
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+          version="${tag#v}"
+          jq --arg v "$version" '.version = $v' custom_components/smart_temperature_control/manifest.json > m.json
+          mv m.json custom_components/smart_temperature_control/manifest.json
+      - name: Zip integration
+        run: cd custom_components/smart_temperature_control && zip -r ../../smart_temperature_control.zip . -x "__pycache__/*"
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: smart_temperature_control.zip
+          tag_name: ${{ env.TAG }}
+          name: ${{ env.TAG }}
+          generate_release_notes: true
