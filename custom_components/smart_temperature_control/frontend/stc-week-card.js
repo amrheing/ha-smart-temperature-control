@@ -3,6 +3,24 @@
 // entity: climate.schlafzimmer_heizung
 const DAYS_DE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 
+// All colours come from the active Home Assistant theme (CSS variables), so the
+// cards follow light/dark mode and themes like Noctis. Each can be overridden in
+// a theme or card_mod via the --stc-* variables.
+const STC_THEME = `
+  :host{
+    --stc-surface:var(--ha-card-background,var(--card-background-color,#fff));
+    --stc-border:var(--ha-card-border-color,var(--divider-color,#e0e0e0));
+    --stc-accent:var(--primary-color,#03a9f4);
+    --stc-on-accent:var(--text-primary-color,#fff);
+    --stc-comfort-c:var(--stc-comfort,var(--state-climate-heat-color,var(--orange-color,#ff9800)));
+    --stc-eco-c:var(--stc-eco,color-mix(in srgb,var(--state-climate-cool-color,var(--blue-color,#2196f3)) 40%,var(--stc-surface)));
+  }
+  .badge{display:inline-flex;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600;
+    color:color-mix(in srgb,var(--c) 70%,var(--primary-text-color));background:color-mix(in srgb,var(--c) 20%,transparent)}
+  .tog{color:var(--primary-text-color);border:1px solid var(--stc-border);background:none}
+  .tog.on{background:var(--stc-accent);color:var(--stc-on-accent);border-color:var(--stc-accent)}
+`;
+
 class StcWeekCard extends HTMLElement {
   setConfig(config) {
     if (!config.entity || !config.entity.startsWith("climate.")) {
@@ -45,16 +63,16 @@ class StcWeekCard extends HTMLElement {
       let cells = "";
       for (let s = 0; s < slots; s++) {
         const k = row[s] === "k";
-        const mark = d === today && s === nowSlot ? "box-shadow:inset 0 0 0 2px var(--primary-text-color);" : "";
+        const mark = d === today && s === nowSlot ? "box-shadow:inset 0 0 0 2px var(--stc-accent);" : "";
         const hh = String(Math.floor((s * 1440) / slots / 60)).padStart(2, "0");
         const mm = String(((s * 1440) / slots) % 60).padStart(2, "0");
-        cells += `<button data-d="${d}" data-s="${s}" title="${DAYS_DE[d]} ${hh}:${mm} ${k ? "Komfort" : "Eco"}" style="background:${k ? "var(--stc-comfort,#f97316)" : "var(--stc-eco,#bfd0fb)"};${mark}"></button>`;
+        cells += `<button data-d="${d}" data-s="${s}" title="${DAYS_DE[d]} ${hh}:${mm} ${k ? "Komfort" : "Eco"}" style="background:${k ? "var(--stc-comfort-c)" : "var(--stc-eco-c)"};${mark}"></button>`;
       }
       rows += `<span class="day${d === today ? " today" : ""}">${DAYS_DE[d]}</span><div class="row" style="grid-template-columns:repeat(${slots},minmax(0,1fr));${dim}">${cells}</div>`;
     });
     const wrap = (inner) => (this._config.embedded ? `<div class="emb">${inner}</div>` : `<ha-card>${inner}</ha-card>`);
     this.shadowRoot.innerHTML = `
-      <style>
+      <style>${STC_THEME}
         ha-card{padding:16px} .emb{padding:0}
         .head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
         .title{font-weight:600;font-size:16px}
@@ -66,11 +84,11 @@ class StcWeekCard extends HTMLElement {
         .row{display:grid;gap:1px;border-radius:6px;overflow:hidden}
         .row button{height:30px;border:none;padding:0;min-width:0;cursor:pointer}
         .foot{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center;font-size:12px;color:var(--secondary-text-color)}
-        .foot button{min-height:36px;padding:0 12px;border-radius:8px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer}
+        .foot button{min-height:36px;padding:0 12px;border-radius:8px;border:1px solid var(--stc-border);background:none;color:var(--primary-text-color);cursor:pointer}
       </style>
       ${wrap(`
         <div class="head"><span class="title">${title}</span>
-          <span class="legend"><span><i style="background:var(--stc-comfort,#f97316)"></i>Komfort ${fmt(st.attributes.comfort)}</span><span><i style="background:var(--stc-eco,#bfd0fb)"></i>Eco ${fmt(st.attributes.eco)}</span></span></div>
+          <span class="legend"><span><i style="background:var(--stc-comfort-c)"></i>Komfort ${fmt(st.attributes.comfort)}</span><span><i style="background:var(--stc-eco-c)"></i>Eco ${fmt(st.attributes.eco)}</span></span></div>
         <div class="grid"><span></span><div class="axis"><span>0</span><span>6</span><span>12</span><span>18</span><span>24</span></div>${rows}</div>
         <div class="foot"><button id="copy">Montag auf Di–Fr kopieren</button><span>Antippen wechselt Komfort ↔ Eco</span></div>
       `)}`;
@@ -116,16 +134,17 @@ window.customCards.push({ type: "stc-week-card", name: "Smart Temperatur Control
 // directly below it (and closes it again).
 // type: custom:stc-rooms-card
 // entities: [climate.schlafzimmer_heizung, ...]   (optional, default: all rooms)
+const STC_GREY = "var(--grey-color,#9e9e9e)";
 const REASONS = {
-  comfort: ["Komfort", "#9A3412", "#FFF1E8"],
-  eco: ["Eco", "#1E40AF", "#EAF0FE"],
-  manual: ["Manuell", "#5B21B6", "#F1EBFE"],
-  window: ["Fenster", "#115E59", "#E2F3F1"],
-  party: ["Party", "#9D174D", "#FCE7F3"],
-  vacation: ["Urlaub", "#3F3F46", "#E9E9EC"],
-  summer: ["Sommer", "#44403C", "#ECEAE6"],
-  off: ["Aus", "#44403C", "#ECEAE6"],
-  permanent_comfort: ["Komfort", "#9A3412", "#FFF1E8"],
+  comfort: ["Komfort", "var(--stc-comfort-c)"],
+  eco: ["Eco", "var(--state-climate-cool-color,var(--blue-color,#2196f3))"],
+  manual: ["Manuell", "var(--purple-color,#926bc7)"],
+  window: ["Fenster", "var(--teal-color,#009688)"],
+  party: ["Party", "var(--pink-color,#e91e63)"],
+  vacation: ["Urlaub", STC_GREY],
+  summer: ["Sommer", STC_GREY],
+  off: ["Aus", STC_GREY],
+  permanent_comfort: ["Komfort", "var(--stc-comfort-c)"],
 };
 const SENSOR_STATUS = {
   ok: "verwendet",
@@ -230,7 +249,7 @@ class StcRoomsCard extends HTMLElement {
       const st = h.states[c];
       if (!st) return;
       const a = st.attributes;
-      const [label, fg, bg] = REASONS[a.reason] || [a.reason, "#44403C", "#ECEAE6"];
+      const [label, col] = REASONS[a.reason] || [a.reason, STC_GREY];
       const open = this._open === c;
       const flags = [
         a.control ? "" : '<span class="flag">Lesemodus</span>',
@@ -240,7 +259,7 @@ class StcRoomsCard extends HTMLElement {
       boxes += `<button class="box${open ? " open" : ""}${a.resting ? " rest" : ""}" data-room="${c}" aria-expanded="${open}">
           <span class="row"><span class="name">${this._name(c, st)}</span></span>
           <span class="row base"><span class="ist">${this._fmt(a.current_temperature)}</span><span class="soll">Soll ${this._fmt(a.temperature)}</span></span>
-          <span class="row wrap"><span class="badge" style="color:${fg};background:${bg}">${label}</span>${flags}</span>
+          <span class="row wrap"><span class="badge" style="--c:${col}">${label}</span>${flags}</span>
           <span class="why">${this._reasonText(a)}</span>
         </button>`;
       if (open) boxes += this._detail(c, st);
@@ -361,38 +380,38 @@ class StcRoomsCard extends HTMLElement {
   }
 }
 
-StcRoomsCard.css = `
+StcRoomsCard.css = STC_THEME + `
   :host{display:block}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));grid-auto-flow:row dense;gap:10px}
   button{font-family:inherit;cursor:pointer;color:inherit}
   .box{display:flex;flex-direction:column;gap:8px;text-align:left;padding:14px;border-radius:var(--ha-card-border-radius,14px);min-height:44px;
-    background:var(--card-background-color,#fff);border:1px solid var(--divider-color,#dad7d1);color:var(--primary-text-color)}
-  .box.open{border:2px solid var(--primary-text-color)}
+    background:var(--stc-surface);border:var(--ha-card-border-width,1px) solid var(--stc-border);box-shadow:var(--ha-card-box-shadow,none);
+    backdrop-filter:var(--ha-card-backdrop-filter,none);color:var(--primary-text-color)}
+  .box.open{border:2px solid var(--stc-accent)}
   .box.rest{opacity:.7}
   .row{display:flex;gap:6px;align-items:center} .row.base{align-items:baseline} .row.wrap{flex-wrap:wrap}
   .name{font-size:14px;font-weight:600}
   .ist{font-size:26px;font-weight:600} .soll{font-size:13px;color:var(--secondary-text-color)}
-  .badge{display:inline-flex;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600}
   .flag{font-size:11px;color:var(--secondary-text-color)} .flag.bad,.bad{color:var(--error-color,#b42318)} .warn{color:var(--warning-color,#b45309)}
   .why{font-size:12px;color:var(--secondary-text-color);line-height:1.35} .why.c{text-align:center;margin:0;font-size:13px}
-  .detail{grid-column:1/-1;box-sizing:border-box;background:var(--card-background-color,#fff);border:2px solid var(--primary-text-color);
-    border-radius:18px;padding:20px;display:flex;flex-wrap:wrap;gap:24px;color:var(--primary-text-color)}
+  .detail{grid-column:1/-1;box-sizing:border-box;background:var(--stc-surface);border:2px solid var(--stc-accent);
+    box-shadow:var(--ha-card-box-shadow,none);border-radius:var(--ha-card-border-radius,18px);padding:20px;display:flex;flex-wrap:wrap;gap:24px;color:var(--primary-text-color)}
   .col{flex:1 1 260px;min-width:0;display:flex;flex-direction:column;gap:10px} .col.wide2{flex:999 1 420px}
   .dhead{display:flex;justify-content:space-between;align-items:center} h3{margin:0;font-size:20px} h4{margin:0;font-size:14px} h4.sep{padding-top:12px;border-top:1px solid var(--divider-color)}
-  .x{min-width:44px;min-height:44px;border-radius:22px;border:1px solid var(--divider-color);background:none;font-size:18px}
+  .x{min-width:44px;min-height:44px;border-radius:22px;border:1px solid var(--stc-border);background:none;font-size:18px}
   .dial{display:flex;flex-direction:column;align-items:center;gap:2px;padding:12px 0}
   .big{font-size:44px;font-weight:700} .lbl{font-size:12px;color:var(--secondary-text-color)}
   .steps{display:flex;gap:16px;align-items:center;justify-content:center} .hint{font-size:12px;color:var(--secondary-text-color);max-width:150px;text-align:center}
-  .round{width:48px;height:48px;border-radius:24px;border:1px solid var(--divider-color);background:none;font-size:22px;flex:none}
+  .round{width:48px;height:48px;border-radius:24px;border:1px solid var(--stc-border);background:none;font-size:22px;flex:none}
   .round[disabled]{opacity:.35;cursor:default}
   .two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-  .tog{min-height:44px;border-radius:10px;font-size:14px;font-weight:600;border:1px solid var(--divider-color);background:none}
-  .tog.on{background:var(--primary-text-color);color:var(--card-background-color,#fff);border-color:var(--primary-text-color)}
+  .tog{min-height:44px;border-radius:10px;font-size:14px;font-weight:600}
   .num{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border-radius:10px;border:1px solid var(--divider-color);font-size:13px;text-align:center}
   .kv{display:flex;justify-content:space-between;gap:8px;font-size:13px} .kv span:last-child{text-align:right}
-  .manual{flex:1 1 100%;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-radius:14px;background:#F1EBFE;border:1px solid #C9B6F7;color:#3B1A86;font-size:13px}
-  .btns{display:flex;flex-wrap:wrap;gap:8px} .btns button{min-height:44px;padding:0 16px;border-radius:10px;border:1px solid #8B6FD6;background:#fff;color:#3B1A86;font-weight:600}
-  .btns button.pri{background:#5B21B6;color:#fff;border:none}
+  .manual{flex:1 1 100%;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-radius:14px;--c:var(--purple-color,#926bc7);
+    background:color-mix(in srgb,var(--c) 16%,var(--stc-surface));border:1px solid color-mix(in srgb,var(--c) 45%,transparent);color:var(--primary-text-color);font-size:13px}
+  .btns{display:flex;flex-wrap:wrap;gap:8px} .btns button{min-height:44px;padding:0 16px;border-radius:10px;border:1px solid var(--stc-border);background:var(--stc-surface);color:var(--primary-text-color);font-weight:600}
+  .btns button.pri{background:var(--stc-accent);color:var(--stc-on-accent);border:none}
 `;
 
 customElements.define("stc-rooms-card", StcRoomsCard);
@@ -473,7 +492,7 @@ class StcTableCard extends HTMLElement {
         const st = h.states[c];
         if (!st) return "";
         const a = st.attributes;
-        const [label, fg, bg] = REASONS[a.reason] || [a.reason, "#44403C", "#ECEAE6"];
+        const [label, col] = REASONS[a.reason] || [a.reason, STC_GREY];
         const on = st.state !== "off";
         const sched = stcSib(h, c, "switch", "schedule_enabled");
         const control = stcSib(h, c, "switch", "control");
@@ -485,7 +504,7 @@ class StcTableCard extends HTMLElement {
           <th scope="row"><button class="link" data-act="info" data-e="${c}">${name}</button>${bad ? ' <span class="dot" title="Hinweis"></span>' : ""}</th>
           <td class="n">${stcFmt(a.current_temperature)}</td>
           <td class="n"><strong>${stcFmt(a.temperature)}</strong></td>
-          <td><span class="badge" style="color:${fg};background:${bg}">${label}</span></td>
+          <td><span class="badge" style="--c:${col}">${label}</span></td>
           <td><button class="tog${on ? " on" : ""}" data-act="heat" data-e="${c}" data-v="${on ? "off" : "heat"}" aria-pressed="${on}">${on ? "an" : "aus"}</button></td>
           <td><button class="tog${zp ? " on" : ""}${on ? "" : " dim"}" data-act="sw" data-e="${sched}" data-v="${zp ? "off" : "on"}" aria-pressed="${zp}">${zp ? "an" : "aus"}</button></td>
           <td><button class="tog${ctl ? " on" : ""}" data-act="sw" data-e="${control}" data-v="${ctl ? "off" : "on"}" aria-pressed="${ctl}">${ctl ? "an" : "Lesen"}</button></td>
@@ -503,20 +522,18 @@ class StcTableCard extends HTMLElement {
     return {};
   }
 }
-StcTableCard.css = `
+StcTableCard.css = STC_THEME + `
   ha-card{padding:8px 4px}
   .wrap{overflow-x:auto}
   table{width:100%;border-collapse:collapse;font-size:14px;color:var(--primary-text-color)}
   th,td{padding:6px 8px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--divider-color,#e5e2dc)}
   thead th{font-size:12px;font-weight:600;color:var(--secondary-text-color)}
   tbody tr:last-child th,tbody tr:last-child td{border-bottom:none}
-  th[scope=row],thead th:first-child{position:sticky;left:0;z-index:1;background:var(--card-background-color,#fff)}
+  th[scope=row],thead th:first-child{position:sticky;left:0;z-index:1;background:var(--stc-surface)}
   .n{text-align:right;font-variant-numeric:tabular-nums}
   button{font-family:inherit;cursor:pointer;color:inherit}
   .link{background:none;border:none;padding:8px 0;font-size:14px;font-weight:600;text-align:left}
-  .badge{display:inline-flex;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600}
-  .tog{min-width:56px;min-height:36px;border-radius:8px;font-size:13px;font-weight:600;border:1px solid var(--divider-color);background:none}
-  .tog.on{background:var(--primary-text-color);color:var(--card-background-color,#fff);border-color:var(--primary-text-color)}
+  .tog{min-width:56px;min-height:36px;border-radius:8px;font-size:13px;font-weight:600}
   .tog.dim{opacity:.35}
   .dot{display:inline-block;width:8px;height:8px;border-radius:4px;background:var(--error-color,#b42318);vertical-align:middle}
 `;
@@ -653,7 +670,7 @@ class StcDevicesCard extends HTMLElement {
       const dl = c.date.toLocaleDateString("de-DE", { weekday: "short", day: "numeric", month: "numeric" });
       seg(c.offline, "var(--error-color,#b42318)", `${dl}: ${c.offline}× offline`);
       seg(c.cmd, "var(--warning-color,#b45309)", `${dl}: ${c.cmd}× Befehl wiederholt/fehlgeschlagen`);
-      seg(c.failed, "#7c2d12", `${dl}: ${c.failed}× Sollwert nicht übernommen`);
+      seg(c.failed, "var(--deep-orange-color,#ff6f22)", `${dl}: ${c.failed}× Sollwert nicht übernommen`);
       if (!c.offline && !c.cmd && !c.failed) bars += `<rect x="${x}" y="${H - 2}" width="${W}" height="2" rx="1" fill="var(--divider-color,#dad7d1)"/>`;
       const avail = c.offline_min === 0 ? "var(--success-color,#15803d)" : c.offline_min < 60 ? "var(--warning-color,#b45309)" : "var(--error-color,#b42318)";
       bars += `<rect x="${x}" y="${H + 4}" width="${W}" height="4" rx="2" fill="${avail}" opacity="${c.offline_min ? 1 : 0.35}"><title>${dl}: ${c.offline_min ? c.offline_min + " min nicht erreichbar" : "immer erreichbar"}</title></rect>`;
@@ -745,7 +762,7 @@ class StcDevicesCard extends HTMLElement {
     return {};
   }
 }
-StcDevicesCard.css = `
+StcDevicesCard.css = STC_THEME + `
   ha-card{padding:8px 4px}
   .head{display:flex;gap:12px;align-items:baseline;padding:4px 8px 8px;font-size:14px;color:var(--primary-text-color)}
   .wrap{overflow-x:auto}
@@ -753,7 +770,7 @@ StcDevicesCard.css = `
   th,td{padding:6px 8px;text-align:left;white-space:nowrap;vertical-align:top;border-bottom:1px solid var(--divider-color,#e5e2dc)}
   thead th{font-size:12px;font-weight:600;color:var(--secondary-text-color);vertical-align:bottom}
   tbody tr:last-child th,tbody tr:last-child td{border-bottom:none}
-  th[scope=row],thead th:first-child{position:sticky;left:0;z-index:1;background:var(--card-background-color,#fff)}
+  th[scope=row],thead th:first-child{position:sticky;left:0;z-index:1;background:var(--stc-surface)}
   .n{text-align:right;font-variant-numeric:tabular-nums}
   .sub{font-size:11px;font-weight:400;color:var(--secondary-text-color)}
   .link{background:none;border:none;padding:0;font:inherit;font-weight:600;cursor:pointer;color:inherit;text-align:left}
