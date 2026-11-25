@@ -73,9 +73,11 @@ DEFAULT_OPTIONS = {
 
 
 def _num(minimum: float, maximum: float, step: float, unit: str | None = None) -> selector.NumberSelector:
-    return selector.NumberSelector(
-        selector.NumberSelectorConfig(min=minimum, max=maximum, step=step, mode=selector.NumberSelectorMode.BOX, unit_of_measurement=unit)
-    )
+    config = selector.NumberSelectorConfig(min=minimum, max=maximum, step=step, mode=selector.NumberSelectorMode.BOX)
+    if unit is not None:
+        # HA rejects unit_of_measurement=None, which made the options form fail with 400.
+        config["unit_of_measurement"] = unit
+    return selector.NumberSelector(config)
 
 
 class StcConfigFlow(ConfigFlow, domain=DOMAIN):
