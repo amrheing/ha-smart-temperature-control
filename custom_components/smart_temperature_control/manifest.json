@@ -10,5 +10,5 @@
   "issue_tracker": "https://github.com/amrheing/ha-smart-temperature-control/issues",
   "loggers": ["custom_components.smart_temperature_control"],
   "requirements": [],
-  "version": "0.1.5"
+  "version": "0.1.6"
 }
