@@ -20,6 +20,7 @@ from homeassistant.components.climate import (
 from homeassistant.const import ATTR_ENTITY_ID, ATTR_TEMPERATURE
 from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.util import dt as dt_util
 
 from .const import (
     PROFILE_AUTO,
@@ -145,3 +146,93 @@ async def async_call(hass: HomeAssistant, entity_id: str, service: str, data: di
     await hass.services.async_call(
         CLIMATE_DOMAIN, service, {ATTR_ENTITY_ID: entity_id, **data}, blocking=True
     )
+
+
+# ----- device health ---------------------------------------------------------
+# What the devices view shows per physical thermostat. Each entry: key ->
+# (domain, hints in unique_id / translation_key / entity_id, device class).
+_HEALTH_ENTITIES: dict[str, tuple[str, tuple[str, ...], str | None]] = {
+    "battery": ("sensor", (), "battery"),
+    "rssi": ("sensor", ("-rssi", "_rssi"), None),
+    "lqi": ("sensor", ("-lqi", "_lqi"), None),
+    "heat_demand": ("sensor", ("pi_heating_demand", "valve_position", "pi_waermebedarf"), None),
+    "window_detection": ("switch", _WINDOW_DETECTION_HINTS, None),
+    "external_priority": ("switch", ("radiator_covered", "priorisieren"), None),
+    "mounting_mode": ("binary_sensor", ("mounting_mode_active",), None),
+    "software_error": ("sensor", ("sw_error_code",), None),
+    "adaptation": ("sensor", ("adaptation_run_status",), None),
+    "firmware": ("update", ("firmware",), None),
+}
+
+BATTERY_LOW = 20  # % – same rule as the battery list
+STALE_AFTER_H = 3  # no report from the TRV for this long = suspicious
+RSSI_WEAK = -85
+LQI_WEAK = 60
+
+
+def _num(value: str | None) -> float | None:
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+
+
+def device_health(hass: HomeAssistant, climate_entity_id: str) -> dict:
+    """Reachability, battery, radio and function of one physical thermostat."""
+    ereg = er.async_get(hass)
+    st = hass.states.get(climate_entity_id)
+    out: dict = {
+        "entity_id": climate_entity_id,
+        "name": (st.attributes.get("friendly_name") if st else None) or climate_entity_id,
+        "available": st is not None and st.state not in ("unavailable", "unknown"),
+        "setpoint": st.attributes.get(ATTR_TEMPERATURE) if st else None,
+        "local_temperature": st.attributes.get("current_temperature") if st else None,
+        "hvac_action": st.attributes.get("hvac_action") if st else None,
+        "last_seen": None,
+        "issues": [],
+    }
+    ent = ereg.async_get(climate_entity_id)
+    siblings = er.async_entries_for_device(ereg, ent.device_id, include_disabled_entities=True) if ent and ent.device_id else []
+    if ent and ent.device_id and (dev := dr.async_get(hass).async_get(ent.device_id)):
+        out["name"] = dev.name_by_user or dev.name or out["name"]
+        out["model"] = " ".join(x for x in (dev.manufacturer, dev.model) if x)
+    last = st.last_reported if st else None
+    for cand in siblings:
+        if cand.disabled_by is None and (cst := hass.states.get(cand.entity_id)) and cst.state not in ("unavailable", "unknown"):
+            if last is None or cst.last_reported > last:
+                last = cst.last_reported
+        text = f"{cand.entity_id} {cand.unique_id} {cand.translation_key or ''}".lower()
+        for key, (domain, hints, dclass) in _HEALTH_ENTITIES.items():
+            if key in out or cand.domain != domain:
+                continue
+            if dclass and (cand.device_class or cand.original_device_class) != dclass:
+                continue
+            if hints and not any(h in text for h in hints):
+                continue
+            if cand.disabled_by is not None:
+                out[key] = {"entity_id": cand.entity_id, "disabled": True}
+                continue
+            cst = hass.states.get(cand.entity_id)
+            value = cst.state if cst else None
+            if domain == "sensor" and key in ("battery", "rssi", "lqi", "heat_demand"):
+                value = _num(value)
+            out[key] = {"entity_id": cand.entity_id, "value": value}
+    out["last_seen"] = last.isoformat() if last else None
+
+    issues = out["issues"]
+    if not out["available"]:
+        issues.append("unavailable")
+    battery = (out.get("battery") or {}).get("value")
+    if isinstance(battery, float) and battery < BATTERY_LOW:
+        issues.append("battery_low")
+    if last is not None and (dt_util.utcnow() - last).total_seconds() > STALE_AFTER_H * 3600:
+        issues.append("stale")
+    rssi = (out.get("rssi") or {}).get("value")
+    lqi = (out.get("lqi") or {}).get("value")
+    if (isinstance(rssi, float) and rssi < RSSI_WEAK) or (isinstance(lqi, float) and lqi < LQI_WEAK):
+        issues.append("weak_signal")
+    if (out.get("mounting_mode") or {}).get("value") == "on":
+        issues.append("mounting_mode")
+    if (out.get("firmware") or {}).get("value") == "on":
+        issues.append("firmware_update")
+    return out

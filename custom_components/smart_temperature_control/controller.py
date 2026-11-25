@@ -370,6 +370,7 @@ class Room:
             "sensors": {r.entity_id: {"value": r.value, "status": r.status} for r in self.temperature.readings},
             "override": self.override,
             "problem": self.problem,
+            "devices": [trv.device_health(self.hass, e) for e in self.thermostats],
         }
 
 

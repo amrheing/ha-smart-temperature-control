@@ -53,7 +53,9 @@ class RoomTargetSensor(RoomEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return self.room.attributes()
+        attrs = self.room.attributes()
+        attrs.pop("devices", None)  # only on the climate entity
+        return attrs
 
 
 class HouseOverview(HouseEntity, SensorEntity):

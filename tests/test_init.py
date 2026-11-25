@@ -221,3 +221,36 @@ async def test_trv_window_detection_switched_off_with_own_contacts(hass, setup):
     room.stored["control"] = True
     await room.async_refresh()
     assert [c.data["entity_id"] for c in off] == ["switch.sz_1_window"]
+
+
+async def test_device_health(hass, setup):
+    from homeassistant.helpers import device_registry as dr, entity_registry as er
+
+    entry, _, _ = setup
+    zha = MockConfigEntry(domain="zha")
+    zha.add_to_hass(hass)
+    dev = dr.async_get(hass).async_get_or_create(
+        config_entry_id=zha.entry_id, identifiers={("zha", "sz1")}, manufacturer="Danfoss", model="eTRV0100", name="SZ Thermostat 1"
+    )
+    reg = er.async_get(hass)
+    hass.states.async_remove("climate.sz_1")
+    reg.async_get_or_create("climate", "zha", "sz1-1-513", device_id=dev.id, suggested_object_id="sz_1")
+    _trv(hass, "climate.sz_1", 20)
+    reg.async_get_or_create("sensor", "zha", "sz1-1-1", device_id=dev.id, suggested_object_id="sz_1_bat", original_device_class="battery")
+    reg.async_get_or_create("sensor", "zha", "sz1-1-0-rssi", device_id=dev.id, suggested_object_id="sz_1_rssi",
+                            disabled_by=er.RegistryEntryDisabler.INTEGRATION)
+    reg.async_get_or_create("sensor", "zha", "sz1-1-513-pi_heating_demand", device_id=dev.id, suggested_object_id="sz_1_pi")
+    hass.states.async_set("sensor.sz_1_bat", "15")
+    hass.states.async_set("sensor.sz_1_pi", "42")
+    room = _room(entry)
+    await room.async_refresh()
+    h = room.attributes()["devices"][0]
+    assert h["name"] == "SZ Thermostat 1"
+    assert h["model"] == "Danfoss eTRV0100"
+    assert h["available"] is True
+    assert h["battery"]["value"] == 15.0
+    assert h["heat_demand"]["value"] == 42.0
+    assert h["rssi"]["disabled"] is True
+    assert "battery_low" in h["issues"]
+    assert h["last_seen"] is not None
+    assert "devices" in hass.states.get("climate.heizung").attributes

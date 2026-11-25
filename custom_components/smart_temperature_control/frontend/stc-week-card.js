@@ -397,3 +397,253 @@ StcRoomsCard.css = `
 
 customElements.define("stc-rooms-card", StcRoomsCard);
 window.customCards.push({ type: "stc-rooms-card", name: "Smart Temperatur Control – Räume", description: "Übersicht aller Räume; Antippen öffnet den Raumregler direkt darunter." });
+
+// ---------------------------------------------------------------------------
+// Shared helpers for the table cards
+const stcRooms = (h, cfg) =>
+  cfg.entities ||
+  Object.keys(h.states).filter((e) => e.startsWith("climate.") && h.entities?.[e]?.platform === "smart_temperature_control");
+const stcSib = (h, climate, domain, key) => {
+  const dev = h.entities?.[climate]?.device_id;
+  if (!dev) return null;
+  const hit = Object.values(h.entities).find(
+    (e) => e.device_id === dev && e.entity_id.startsWith(domain + ".") && e.translation_key === key
+  );
+  return hit ? hit.entity_id : null;
+};
+const stcFmt = (v, unit = " °C", digits = 1) =>
+  v == null || v === "" || isNaN(v) ? "–" : Number(v).toFixed(digits).replace(".", ",") + unit;
+const stcAgo = (iso) => {
+  if (!iso) return "–";
+  const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (min < 1) return "gerade";
+  if (min < 60) return `vor ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 48) return `vor ${h} h`;
+  return `vor ${Math.floor(h / 24)} Tagen`;
+};
+const stcEsc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const stcMoreInfo = (el, entityId) =>
+  el.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId }, bubbles: true, composed: true }));
+
+// ---------------------------------------------------------------------------
+// Rooms table: all rooms in one table (like the old Heizen overview).
+// type: custom:stc-table-card
+class StcTableCard extends HTMLElement {
+  setConfig(config) {
+    this._config = config || {};
+  }
+  getCardSize() {
+    return 6;
+  }
+  getGridOptions() {
+    return { columns: "full" };
+  }
+  set hass(hass) {
+    this._hass = hass;
+    const ids = stcRooms(hass, this._config);
+    const watch = [];
+    ids.forEach((c) => {
+      watch.push(c, stcSib(hass, c, "switch", "schedule_enabled"), stcSib(hass, c, "switch", "control"));
+    });
+    const key = JSON.stringify(watch.map((e) => e && hass.states[e] && [hass.states[e].state, hass.states[e].attributes.temperature,
+      hass.states[e].attributes.current_temperature, hass.states[e].attributes.reason, hass.states[e].attributes.comfort, hass.states[e].attributes.eco]));
+    if (key !== this._key) {
+      this._key = key;
+      this._render();
+    }
+  }
+  _render() {
+    if (!this.shadowRoot) {
+      this.attachShadow({ mode: "open" });
+      this.shadowRoot.addEventListener("click", (ev) => {
+        const b = ev.target.closest("[data-act]");
+        if (!b) return;
+        const d = b.dataset;
+        if (d.act === "info") stcMoreInfo(this, d.e);
+        else if (d.act === "heat") this._hass.callService("climate", "set_hvac_mode", { entity_id: d.e, hvac_mode: d.v });
+        else if (d.act === "sw" && d.e && d.e !== "null")
+          this._hass.callService("switch", d.v === "on" ? "turn_on" : "turn_off", { entity_id: d.e });
+      });
+    }
+    const h = this._hass;
+    const rows = stcRooms(h, this._config)
+      .map((c) => {
+        const st = h.states[c];
+        if (!st) return "";
+        const a = st.attributes;
+        const [label, fg, bg] = REASONS[a.reason] || [a.reason, "#44403C", "#ECEAE6"];
+        const on = st.state !== "off";
+        const sched = stcSib(h, c, "switch", "schedule_enabled");
+        const control = stcSib(h, c, "switch", "control");
+        const zp = sched ? h.states[sched]?.state === "on" : a.schedule_enabled;
+        const ctl = control ? h.states[control]?.state === "on" : a.control;
+        const bad = a.problem || a.temperature_source !== "sensors" || (a.devices || []).some((d) => d.issues.length);
+        const name = stcEsc(a.room || a.friendly_name || c);
+        return `<tr>
+          <th scope="row"><button class="link" data-act="info" data-e="${c}">${name}</button>${bad ? ' <span class="dot" title="Hinweis"></span>' : ""}</th>
+          <td class="n">${stcFmt(a.current_temperature)}</td>
+          <td class="n"><strong>${stcFmt(a.temperature)}</strong></td>
+          <td><span class="badge" style="color:${fg};background:${bg}">${label}</span></td>
+          <td><button class="tog${on ? " on" : ""}" data-act="heat" data-e="${c}" data-v="${on ? "off" : "heat"}" aria-pressed="${on}">${on ? "an" : "aus"}</button></td>
+          <td><button class="tog${zp ? " on" : ""}${on ? "" : " dim"}" data-act="sw" data-e="${sched}" data-v="${zp ? "off" : "on"}" aria-pressed="${zp}">${zp ? "an" : "aus"}</button></td>
+          <td><button class="tog${ctl ? " on" : ""}" data-act="sw" data-e="${control}" data-v="${ctl ? "off" : "on"}" aria-pressed="${ctl}">${ctl ? "an" : "Lesen"}</button></td>
+          <td class="n">${stcFmt(a.comfort)}</td>
+          <td class="n">${stcFmt(a.eco)}</td>
+        </tr>`;
+      })
+      .join("");
+    this.shadowRoot.innerHTML = `<style>${StcTableCard.css}</style><ha-card><div class="wrap"><table>
+      <thead><tr><th scope="col">Raum</th><th scope="col" class="n">Ist</th><th scope="col" class="n">Soll</th><th scope="col">Grund</th>
+      <th scope="col">Heizung</th><th scope="col">Zeitplan</th><th scope="col">Steuern</th><th scope="col" class="n">Komfort</th><th scope="col" class="n">Eco</th></tr></thead>
+      <tbody>${rows}</tbody></table></div></ha-card>`;
+  }
+  static getStubConfig() {
+    return {};
+  }
+}
+StcTableCard.css = `
+  ha-card{padding:8px 4px}
+  .wrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:14px;color:var(--primary-text-color)}
+  th,td{padding:6px 8px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--divider-color,#e5e2dc)}
+  thead th{font-size:12px;font-weight:600;color:var(--secondary-text-color)}
+  tbody tr:last-child th,tbody tr:last-child td{border-bottom:none}
+  th[scope=row],thead th:first-child{position:sticky;left:0;z-index:1;background:var(--card-background-color,#fff)}
+  .n{text-align:right;font-variant-numeric:tabular-nums}
+  button{font-family:inherit;cursor:pointer;color:inherit}
+  .link{background:none;border:none;padding:8px 0;font-size:14px;font-weight:600;text-align:left}
+  .badge{display:inline-flex;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600}
+  .tog{min-width:56px;min-height:36px;border-radius:8px;font-size:13px;font-weight:600;border:1px solid var(--divider-color);background:none}
+  .tog.on{background:var(--primary-text-color);color:var(--card-background-color,#fff);border-color:var(--primary-text-color)}
+  .tog.dim{opacity:.35}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:4px;background:var(--error-color,#b42318);vertical-align:middle}
+`;
+customElements.define("stc-table-card", StcTableCard);
+window.customCards.push({ type: "stc-table-card", name: "Smart Temperatur Control – Raumtabelle", description: "Alle Räume als Tabelle: Ist, Soll, Grund, Heizung, Zeitplan, Steuern, Komfort/Eco." });
+
+// ---------------------------------------------------------------------------
+// Devices: every physical thermostat with reachability, battery, radio, function.
+// type: custom:stc-devices-card
+const ISSUES = {
+  unavailable: "nicht erreichbar",
+  battery_low: "Batterie schwach",
+  stale: "meldet sich nicht",
+  weak_signal: "Funk schwach",
+  mounting_mode: "Montagemodus",
+  firmware_update: "Firmware-Update",
+};
+class StcDevicesCard extends HTMLElement {
+  setConfig(config) {
+    this._config = config || {};
+  }
+  getCardSize() {
+    return 8;
+  }
+  getGridOptions() {
+    return { columns: "full" };
+  }
+  set hass(hass) {
+    this._hass = hass;
+    const ids = stcRooms(hass, this._config);
+    const key = JSON.stringify(ids.map((c) => {
+      const a = hass.states[c]?.attributes || {};
+      return [a.temperature, a.resting, a.control, (a.devices || []).map((d) => ({ ...d, last_seen: stcAgo(d.last_seen) }))];
+    }));
+    if (key !== this._key) {
+      this._key = key;
+      this._render();
+    }
+  }
+  _val(x, unit, digits = 0) {
+    if (!x) return "–";
+    if (x.disabled) return '<span class="muted" title="Entität ist in Home Assistant deaktiviert">deaktiviert</span>';
+    return stcFmt(x.value, unit, digits);
+  }
+  _onoff(x, good) {
+    if (!x || x.disabled || x.value == null) return "–";
+    const on = x.value === "on";
+    const cls = good === undefined ? "" : on === good ? "" : "warn";
+    return `<span class="${cls}">${on ? "an" : "aus"}</span>`;
+  }
+  _render() {
+    if (!this.shadowRoot) {
+      this.attachShadow({ mode: "open" });
+      this.shadowRoot.addEventListener("click", (ev) => {
+        const b = ev.target.closest("[data-act=info]");
+        if (b) stcMoreInfo(this, b.dataset.e);
+      });
+    }
+    const h = this._hass;
+    let total = 0;
+    let withIssues = 0;
+    const rows = stcRooms(h, this._config)
+      .map((c) => {
+        const st = h.states[c];
+        if (!st) return "";
+        const a = st.attributes;
+        const room = stcEsc(a.room || a.friendly_name || c);
+        return (a.devices || [])
+          .map((d) => {
+            total += 1;
+            const issues = [...d.issues];
+            const okSet = a.resting ? true : d.setpoint != null && Math.abs(Number(d.setpoint) - Number(a.temperature)) < 0.3;
+            if (!okSet && a.control) issues.push("setpoint");
+            if (issues.length) withIssues += 1;
+            const state = !d.available ? ["bad", "offline"] : issues.length ? ["warn", "Hinweis"] : ["ok", "OK"];
+            const chips = issues
+              .map((i) => `<span class="chip ${i === "unavailable" || i === "battery_low" ? "bad" : "warn"}">${i === "setpoint" ? "Soll weicht ab" : ISSUES[i] || i}</span>`)
+              .join("");
+            const radio = d.rssi && !d.rssi.disabled ? `${this._val(d.rssi, " dBm")}` : "";
+            const lqi = d.lqi && !d.lqi.disabled ? `LQI ${this._val(d.lqi, "")}` : "";
+            const radioTxt = radio || lqi ? [radio, lqi].filter(Boolean).join(" · ") : this._val(d.rssi || d.lqi, "");
+            return `<tr>
+              <th scope="row"><button class="link" data-act="info" data-e="${d.entity_id}">${stcEsc(d.name)}</button><div class="sub">${room}${d.model ? " · " + stcEsc(d.model) : ""}</div></th>
+              <td><span class="st ${state[0]}">${state[1]}</span></td>
+              <td>${stcAgo(d.last_seen)}</td>
+              <td class="n">${this._val(d.battery, " %")}</td>
+              <td class="n">${radioTxt}</td>
+              <td class="n">${stcFmt(d.setpoint)}<div class="sub">${a.resting ? "ruht" : okSet ? "= Raum" : "Raum " + stcFmt(a.temperature)}</div></td>
+              <td class="n">${stcFmt(d.local_temperature)}</td>
+              <td class="n">${this._val(d.heat_demand, " %")}</td>
+              <td>${this._onoff(d.window_detection, false)}</td>
+              <td>${this._onoff(d.external_priority, true)}</td>
+              <td class="chips">${chips}</td>
+            </tr>`;
+          })
+          .join("");
+      })
+      .join("");
+    this.shadowRoot.innerHTML = `<style>${StcDevicesCard.css}</style><ha-card>
+      <div class="head"><strong>${total} Thermostate</strong><span class="${withIssues ? "warn" : "muted"}">${withIssues ? withIssues + " mit Hinweis" : "alle OK"}</span></div>
+      <div class="wrap"><table>
+      <thead><tr><th scope="col">Thermostat</th><th scope="col">Status</th><th scope="col">Zuletzt</th><th scope="col" class="n">Batterie</th>
+      <th scope="col" class="n">Funk</th><th scope="col" class="n">Soll TRV</th><th scope="col" class="n">Ist TRV</th><th scope="col" class="n">Ventil</th>
+      <th scope="col">Eigene Fenstererk.</th><th scope="col">Ext. Fühler</th><th scope="col">Hinweise</th></tr></thead>
+      <tbody>${rows}</tbody></table></div></ha-card>`;
+  }
+  static getStubConfig() {
+    return {};
+  }
+}
+StcDevicesCard.css = `
+  ha-card{padding:8px 4px}
+  .head{display:flex;gap:12px;align-items:baseline;padding:4px 8px 8px;font-size:14px;color:var(--primary-text-color)}
+  .wrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:13px;color:var(--primary-text-color)}
+  th,td{padding:6px 8px;text-align:left;white-space:nowrap;vertical-align:top;border-bottom:1px solid var(--divider-color,#e5e2dc)}
+  thead th{font-size:12px;font-weight:600;color:var(--secondary-text-color);vertical-align:bottom}
+  tbody tr:last-child th,tbody tr:last-child td{border-bottom:none}
+  th[scope=row],thead th:first-child{position:sticky;left:0;z-index:1;background:var(--card-background-color,#fff)}
+  .n{text-align:right;font-variant-numeric:tabular-nums}
+  .sub{font-size:11px;font-weight:400;color:var(--secondary-text-color)}
+  .link{background:none;border:none;padding:0;font:inherit;font-weight:600;cursor:pointer;color:inherit;text-align:left}
+  .st{display:inline-flex;align-items:center;gap:6px;font-weight:600}
+  .st::before{content:"";width:8px;height:8px;border-radius:4px;background:currentColor}
+  .st.ok{color:var(--success-color,#15803d)} .st.warn,.warn{color:var(--warning-color,#b45309)} .st.bad,.bad{color:var(--error-color,#b42318)}
+  .muted{color:var(--secondary-text-color)}
+  .chips{white-space:normal;min-width:120px}
+  .chip{display:inline-block;margin:0 4px 4px 0;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;border:1px solid currentColor}
+`;
+customElements.define("stc-devices-card", StcDevicesCard);
+window.customCards.push({ type: "stc-devices-card", name: "Smart Temperatur Control – Thermostate", description: "Alle physischen Thermostate: Erreichbarkeit, Batterie, Funk, Sollwert, Ventil." });

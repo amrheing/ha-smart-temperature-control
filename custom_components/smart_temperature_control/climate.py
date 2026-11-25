@@ -57,6 +57,9 @@ class RoomClimate(RoomEntity, ClimateEntity):
         super().__init__(room, None)
         self._attr_translation_key = "room"
 
+    # changes every minute (last_seen) and is only for the dashboard
+    _unrecorded_attributes = frozenset({"devices"})
+
     @property
     def hvac_mode(self) -> HVACMode:
         return HVACMode.HEAT if self.room.stored["on"] else HVACMode.OFF

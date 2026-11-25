@@ -48,7 +48,11 @@ async def _async_register_card(hass: HomeAssistant) -> None:
 
         path = Path(__file__).parent / "frontend" / "stc-week-card.js"
         await hass.http.async_register_static_paths([StaticPathConfig(CARD_URL, str(path), False)])
-        add_extra_js_url(hass, CARD_URL)
+        # version in the URL so browsers load the new card after an update
+        from homeassistant.loader import async_get_integration
+
+        version = (await async_get_integration(hass, DOMAIN)).version
+        add_extra_js_url(hass, f"{CARD_URL}?v={version}")
     except Exception as err:  # noqa: BLE001 - the card is optional
         _LOGGER.debug("Week card not registered: %s", err)
 

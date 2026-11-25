@@ -84,6 +84,16 @@ type: custom:stc-rooms-card
 
 One box per room (room temperature, setpoint, reason). Tapping a box opens the room controller directly below it: setpoint ± (holds until the next switch point), Heizung/Zeitplan/Thermostate steuern, week plan, Komfort/Eco, sensors and thermostats. A manual change shows a box with "Für diese Periode speichern" and "Zurück zum Plan".
 
+## Room table and thermostats
+
+```yaml
+type: custom:stc-table-card     # all rooms as a table: Ist, Soll, Grund, Heizung, Zeitplan, Steuern, Komfort, Eco
+---
+type: custom:stc-devices-card   # every physical thermostat
+```
+
+The thermostats card shows per TRV: reachable / offline, last report, battery, radio (RSSI/LQI, if those entities are enabled), TRV setpoint vs. room setpoint, the TRV's own temperature, valve demand, its own window detection and external sensor priority, plus hints (battery below 20 %, no report for 3 h, weak signal, mounting mode, firmware update, setpoint differs). The data is the `devices` attribute of each room's climate entity (not recorded in history).
+
 ## Pilot
 
 Start with two rooms (Schlafzimmer, Büro) in read mode, compare the "Setpoint" sensor with the existing automations, then turn on "Thermostate steuern" per room and disable the old automations for that room.
