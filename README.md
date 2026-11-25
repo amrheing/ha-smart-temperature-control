@@ -73,6 +73,15 @@ entity: climate.schlafzimmer_heizung
 
 Tap a cell to switch Komfort ↔ Eco. Several taps are collected and saved with one call of `smart_temperature_control.set_schedule` (7 strings of `k`/`e`, 48 slots of 30 min by default).
 
+## Rooms card
+
+```yaml
+type: custom:stc-rooms-card
+# entities: [climate.schlafzimmer_heizung, climate.buro_heizung]  # optional, default: all rooms
+```
+
+One box per room (room temperature, setpoint, reason). Tapping a box opens the room controller directly below it: setpoint ± (holds until the next switch point), Heizung/Zeitplan/Thermostate steuern, week plan, Komfort/Eco, sensors and thermostats. A manual change shows a box with "Für diese Periode speichern" and "Zurück zum Plan".
+
 ## Pilot
 
 Start with two rooms (Schlafzimmer, Büro) in read mode, compare the "Setpoint" sensor with the existing automations, then turn on "Thermostate steuern" per room and disable the old automations for that room.

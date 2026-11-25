@@ -337,6 +337,8 @@ class Room:
 
     def attributes(self) -> dict[str, Any]:
         return {
+            "room": self.name,
+            "thermostats": list(self.thermostats),
             "reason": self.decision.reason,
             "until": _iso(self.decision.until),
             "resting": self.decision.resting,
