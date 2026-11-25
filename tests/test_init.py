@@ -254,3 +254,31 @@ async def test_device_health(hass, setup):
     assert "battery_low" in h["issues"]
     assert h["last_seen"] is not None
     assert "devices" in hass.states.get("climate.heizung").attributes
+
+
+async def test_error_statistics(hass, setup):
+    entry, calls, freezer = setup
+    room = _room(entry)
+    house = entry.runtime_data
+    hass.states.async_set("climate.sz_2", "unavailable")
+    await hass.async_block_till_done()
+    freezer.tick(timedelta(minutes=1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    stats = house.stats("climate.sz_2")
+    day = next(iter(stats.values()))
+    assert day["offline"] == 1
+    assert day["offline_min"] >= 1
+    assert room.attributes()["devices"][1]["stats"] == stats
+
+
+async def test_retry_counted_when_setpoint_not_taken(hass, setup):
+    entry, calls, freezer = setup
+    room = _room(entry)
+    room.update(control=True)
+    await hass.async_block_till_done()
+    freezer.tick(timedelta(minutes=31))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    day = next(iter(entry.runtime_data.stats("climate.sz_1").values()))
+    assert day.get("retry", 0) >= 1

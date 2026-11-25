@@ -422,6 +422,7 @@ const stcAgo = (iso) => {
   if (h < 48) return `vor ${h} h`;
   return `vor ${Math.floor(h / 24)} Tagen`;
 };
+const stcDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const stcEsc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const stcMoreInfo = (el, entityId) =>
   el.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId }, bubbles: true, composed: true }));
@@ -546,15 +547,132 @@ class StcDevicesCard extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
     const ids = stcRooms(hass, this._config);
+    this._fetchHistory(ids);
     const key = JSON.stringify(ids.map((c) => {
       const a = hass.states[c]?.attributes || {};
       return [a.temperature, a.resting, a.control, (a.devices || []).map((d) => ({ ...d, last_seen: stcAgo(d.last_seen) }))];
-    }));
+    })) + (this._histAt || "");
     if (key !== this._key) {
       this._key = key;
       this._render();
     }
   }
+  // Offline periods of every TRV from the recorder (also from before the integration existed).
+  async _fetchHistory(ids) {
+    const h = this._hass;
+    const trvs = [];
+    ids.forEach((c) => (h.states[c]?.attributes.devices || []).forEach((d) => trvs.push(d.entity_id)));
+    const want = trvs.sort().join(",");
+    if (!want || this._histLoading || (this._histKey === want && Date.now() - (this._histAt || 0) < 15 * 60000)) return;
+    this._histLoading = true;
+    const days = this._config.days || 14;
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - (days - 1));
+    try {
+      const res = await h.callWS({
+        type: "history/history_during_period",
+        start_time: start.toISOString(),
+        entity_ids: trvs,
+        minimal_response: true,
+        no_attributes: true,
+        significant_changes_only: false,
+      });
+      const out = {};
+      const now = Date.now();
+      for (const id of trvs) {
+        const rows = res[id] || [];
+        const perDay = {};
+        const add = (t0, t1, offline, count) => {
+          // split [t0, t1) over local days
+          let t = t0;
+          while (t < t1) {
+            const d = new Date(t);
+            const key = stcDay(d);
+            d.setHours(24, 0, 0, 0);
+            const end = Math.min(t1, d.getTime());
+            const slot = (perDay[key] = perDay[key] || { offline: 0, offline_min: 0 });
+            if (offline) slot.offline_min += (end - t) / 60000;
+            if (count && t === t0) slot.offline += 1;
+            t = end;
+          }
+        };
+        rows.forEach((r, i) => {
+          const t0 = Math.max(start.getTime(), (r.lu ?? Date.parse(r.last_updated) / 1000) * 1000);
+          const t1 = i + 1 < rows.length ? (rows[i + 1].lu ?? Date.parse(rows[i + 1].last_updated) / 1000) * 1000 : now;
+          const st = r.s ?? r.state;
+          const off = st === "unavailable";
+          const prev = i > 0 ? rows[i - 1].s ?? rows[i - 1].state : null;
+          add(t0, t1, off, off && i > 0 && prev !== "unavailable");
+        });
+        out[id] = perDay;
+      }
+      this._hist = out;
+      this._histKey = want;
+      this._histAt = Date.now();
+    } catch (e) {
+      this._histAt = Date.now(); // no recorder access: show the integration's own counters only
+    }
+    this._histLoading = false;
+    this._key = null;
+    this.hass = this._hass;
+  }
+
+  _chart(d) {
+    const days = this._config.days || 14;
+    const stats = d.stats || {};
+    const hist = this._hist?.[d.entity_id] || {};
+    const cols = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const dt = new Date();
+      dt.setHours(12, 0, 0, 0);
+      dt.setDate(dt.getDate() - i);
+      const key = stcDay(dt);
+      const s = stats[key] || {};
+      const hh = hist[key] || {};
+      cols.push({
+        date: dt,
+        offline: Math.max(s.offline || 0, hh.offline || 0),
+        offline_min: Math.round(Math.max(s.offline_min || 0, hh.offline_min || 0)),
+        cmd: (s.retry || 0) + (s.send_error || 0),
+        failed: s.not_applied || 0,
+      });
+    }
+    const max = Math.max(3, ...cols.map((c) => c.offline + c.cmd + c.failed));
+    const W = 18, GAP = 4, H = 40;
+    let bars = "";
+    cols.forEach((c, i) => {
+      const x = i * (W + GAP);
+      let y = H;
+      const seg = (n, color, label) => {
+        if (!n) return;
+        const hgt = Math.max(3, (n / max) * H);
+        y -= hgt;
+        bars += `<rect x="${x}" y="${y}" width="${W}" height="${hgt - 1}" rx="2" fill="${color}"><title>${label}</title></rect>`;
+      };
+      const dl = c.date.toLocaleDateString("de-DE", { weekday: "short", day: "numeric", month: "numeric" });
+      seg(c.offline, "var(--error-color,#b42318)", `${dl}: ${c.offline}× offline`);
+      seg(c.cmd, "var(--warning-color,#b45309)", `${dl}: ${c.cmd}× Befehl wiederholt/fehlgeschlagen`);
+      seg(c.failed, "#7c2d12", `${dl}: ${c.failed}× Sollwert nicht übernommen`);
+      if (!c.offline && !c.cmd && !c.failed) bars += `<rect x="${x}" y="${H - 2}" width="${W}" height="2" rx="1" fill="var(--divider-color,#dad7d1)"/>`;
+      const avail = c.offline_min === 0 ? "var(--success-color,#15803d)" : c.offline_min < 60 ? "var(--warning-color,#b45309)" : "var(--error-color,#b42318)";
+      bars += `<rect x="${x}" y="${H + 4}" width="${W}" height="4" rx="2" fill="${avail}" opacity="${c.offline_min ? 1 : 0.35}"><title>${dl}: ${c.offline_min ? c.offline_min + " min nicht erreichbar" : "immer erreichbar"}</title></rect>`;
+    });
+    const sum = cols.reduce((a, c) => ({ offline: a.offline + c.offline, min: a.min + c.offline_min, cmd: a.cmd + c.cmd, failed: a.failed + c.failed }), { offline: 0, min: 0, cmd: 0, failed: 0 });
+    const dur = sum.min >= 60 ? `${Math.floor(sum.min / 60)} h ${sum.min % 60} min` : `${sum.min} min`;
+    const text = sum.offline || sum.cmd || sum.failed || sum.min
+      ? `${days} Tage: ` + [
+          sum.offline || sum.min ? `${sum.offline}× offline (${dur})` : "",
+          sum.cmd ? `${sum.cmd}× Befehl wiederholt` : "",
+          sum.failed ? `${sum.failed}× nicht übernommen` : "",
+        ].filter(Boolean).join(" · ")
+      : `${days} Tage ohne Fehler`;
+    const width = days * (W + GAP) - GAP;
+    const first = cols[0].date.toLocaleDateString("de-DE", { day: "numeric", month: "numeric" });
+    return `<div class="chartbox"><svg viewBox="0 0 ${width} ${H + 8}" width="${width}" height="${H + 8}" role="img" aria-label="${text}">${bars}</svg>
+      <div class="ctext"><span class="${sum.offline || sum.failed ? "bad" : sum.cmd ? "warn" : "muted"}">${text}</span><span class="muted">${first} bis heute · rot offline, orange Befehl wiederholt, Streifen = Erreichbarkeit</span></div></div>`;
+  }
+
   _val(x, unit, digits = 0) {
     if (!x) return "–";
     if (x.disabled) return '<span class="muted" title="Entität ist in Home Assistant deaktiviert">deaktiviert</span>';
@@ -609,7 +727,8 @@ class StcDevicesCard extends HTMLElement {
               <td>${this._onoff(d.window_detection, false)}</td>
               <td>${this._onoff(d.external_priority, true)}</td>
               <td class="chips">${chips}</td>
-            </tr>`;
+            </tr>
+            <tr class="chartrow"><td colspan="11">${this._chart(d)}</td></tr>`;
           })
           .join("");
       })
@@ -643,6 +762,11 @@ StcDevicesCard.css = `
   .st.ok{color:var(--success-color,#15803d)} .st.warn,.warn{color:var(--warning-color,#b45309)} .st.bad,.bad{color:var(--error-color,#b42318)}
   .muted{color:var(--secondary-text-color)}
   .chips{white-space:normal;min-width:120px}
+  tr:has(+ .chartrow) th,tr:has(+ .chartrow) td{border-bottom:none}
+  .chartrow td{padding:0 8px 10px}
+  .chartbox{position:sticky;left:8px;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;max-width:calc(100vw - 72px)}
+  .chartbox svg{flex:none;overflow:visible}
+  .ctext{display:flex;flex-direction:column;gap:2px;font-size:12px;white-space:normal;min-width:180px;flex:1}
   .chip{display:inline-block;margin:0 4px 4px 0;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;border:1px solid currentColor}
 `;
 customElements.define("stc-devices-card", StcDevicesCard);

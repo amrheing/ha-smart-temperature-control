@@ -92,7 +92,7 @@ type: custom:stc-table-card     # all rooms as a table: Ist, Soll, Grund, Heizun
 type: custom:stc-devices-card   # every physical thermostat
 ```
 
-The thermostats card shows per TRV: reachable / offline, last report, battery, radio (RSSI/LQI, if those entities are enabled), TRV setpoint vs. room setpoint, the TRV's own temperature, valve demand, its own window detection and external sensor priority, plus hints (battery below 20 %, no report for 3 h, weak signal, mounting mode, firmware update, setpoint differs). The data is the `devices` attribute of each room's climate entity (not recorded in history).
+The thermostats card shows per TRV: reachable / offline, last report, battery, radio (RSSI/LQI, if those entities are enabled), TRV setpoint vs. room setpoint, the TRV's own temperature, valve demand, its own window detection and external sensor priority, plus hints (battery below 20 %, no report for 3 h, weak signal, mounting mode, firmware update, setpoint differs). Below each thermostat a 14-day chart shows errors per day: offline events (red, also read from the recorder history), commands that had to be repeated (orange) and setpoints never applied (dark), plus a strip for minutes not reachable. Useful to compare radio stability (e.g. Zigbee vs. WLAN). The integration keeps its own counters for 30 days. The data is the `devices` attribute of each room's climate entity (not recorded in history).
 
 ## Pilot
 

@@ -12,6 +12,7 @@ from homeassistant.components.climate import DOMAIN as CLIMATE_DOMAIN
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.const import ATTR_ENTITY_ID, ATTR_TEMPERATURE, STATE_ON
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import (
     async_call_later,
@@ -79,6 +80,7 @@ from .temperature import Limits, PlausibilityFilter, RoomTemperature, room_tempe
 _LOGGER = logging.getLogger(__name__)
 STORE_VERSION = 1
 TICK = timedelta(minutes=1)
+STATS_DAYS = 30
 
 
 @dataclass(slots=True)
@@ -276,6 +278,7 @@ class Room:
                     await trv.async_call(self.hass, entity_id, service, data)
             except Exception as err:  # noqa: BLE001 - radio errors must not stop other TRVs
                 _LOGGER.warning("%s: %s not reachable: %s", self.name, entity_id, err)
+                self.house.record(entity_id, "send_error")
             self._sent[entity_id] = want
         if self.control and self._sent and self._verify_unsub is None:
             self._verify_unsub = async_call_later(self.hass, self.house.verify_delay, self._async_verify)
@@ -295,6 +298,8 @@ class Room:
             async_dispatcher_send(self.hass, SIGNAL_ROOM_UPDATED.format(self.id))
             return
         self._retries += 1
+        for e in failed:
+            self.house.record(e, "retry" if self._retries <= self.house.retries else "not_applied")
         if self._retries <= self.house.retries:
             for e in failed:
                 self._sent.pop(e, None)
@@ -339,11 +344,25 @@ class Room:
                 )
             except Exception as err:  # noqa: BLE001
                 _LOGGER.warning("%s: external input %s failed: %s", self.name, entity_id, err)
+                self.house.record(self._trv_of(entity_id), "send_error")
+
+    def _trv_of(self, entity_id: str) -> str:
+        """The room thermostat on the same device as entity_id (else the entity itself)."""
+        reg = er.async_get(self.hass)
+        own = reg.async_get(entity_id)
+        dev = own.device_id if own else None
+        for climate_id in self.thermostats:
+            ent = reg.async_get(climate_id)
+            if dev and ent and ent.device_id == dev:
+                return climate_id
+        return entity_id
 
     @callback
     def thermostat_changed(self, event: Event[EventStateChangedData]) -> None:
         """A setpoint we did not send is a manual change for this period."""
         new, old = event.data["new_state"], event.data["old_state"]
+        if new is not None and new.state == "unavailable" and (old is None or old.state != "unavailable"):
+            self.house.record(new.entity_id, "offline")
         if not self.control or new is None or old is None or self.decision.resting:
             return
         if self.decision.reason == REASON_WINDOW:
@@ -370,7 +389,9 @@ class Room:
             "sensors": {r.entity_id: {"value": r.value, "status": r.status} for r in self.temperature.readings},
             "override": self.override,
             "problem": self.problem,
-            "devices": [trv.device_health(self.hass, e) for e in self.thermostats],
+            "devices": [
+                {**trv.device_health(self.hass, e), "stats": self.house.stats(e)} for e in self.thermostats
+            ],
         }
 
 
@@ -521,6 +542,11 @@ class House:
         self.hass.async_create_task(room.async_refresh())
 
     async def _tick(self, now: datetime) -> None:
+        for room in self.rooms.values():
+            for entity_id in room.thermostats:
+                st = self.hass.states.get(entity_id)
+                if st is None or st.state == "unavailable":
+                    self.record(entity_id, "offline_min", int(TICK.total_seconds() // 60))
         await self.async_refresh_all()
 
     async def _feed(self, _now: datetime) -> None:
@@ -557,6 +583,20 @@ class House:
 
     def save(self) -> None:
         self.store.async_delay_save(lambda: self.data, 2)
+
+    # ----- per-thermostat error statistics -----------------------------------
+    def record(self, entity_id: str, kind: str, amount: int = 1) -> None:
+        """Count an error of one thermostat for today (kept STATS_DAYS days)."""
+        day = dt_util.now().date().isoformat()
+        stats = self.data.setdefault("trv_stats", {}).setdefault(entity_id, {})
+        today = stats.setdefault(day, {})
+        today[kind] = today.get(kind, 0) + amount
+        for old in sorted(stats)[:-STATS_DAYS]:
+            stats.pop(old)
+        self.save()
+
+    def stats(self, entity_id: str) -> dict[str, dict[str, int]]:
+        return self.data.get("trv_stats", {}).get(entity_id, {})
 
     async def async_notify(self, message: str) -> None:
         service = self._opt.get(CONF_NOTIFY)
