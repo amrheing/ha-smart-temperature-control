@@ -197,3 +197,27 @@ async def test_schedule_service(hass, setup):
     room = _room(entry)
     assert room.decision.reason == "eco"
     assert room.decision.target == 17.0
+
+
+async def test_trv_window_detection_switched_off_with_own_contacts(hass, setup):
+    from homeassistant.helpers import device_registry as dr, entity_registry as er
+
+    entry, calls, _ = setup
+    zha = MockConfigEntry(domain="zha")
+    zha.add_to_hass(hass)
+    dev = dr.async_get(hass).async_get_or_create(config_entry_id=zha.entry_id, identifiers={("zha", "sz1")})
+    reg = er.async_get(hass)
+    hass.states.async_remove("climate.sz_1")  # registry avoids ids that have a state
+    reg.async_get_or_create("climate", "zha", "sz1-1-513", device_id=dev.id, suggested_object_id="sz_1")
+    _trv(hass, "climate.sz_1", 17)
+    reg.async_get_or_create("switch", "zha", "sz1-1-513-window_open_feature", device_id=dev.id, suggested_object_id="sz_1_window")
+    reg.async_get_or_create("switch", "zha", "sz1-1-513-external_open_window_detected", device_id=dev.id, suggested_object_id="sz_1_ext_window")
+    hass.states.async_set("switch.sz_1_window", "on")
+    hass.states.async_set("switch.sz_1_ext_window", "off")
+    off = async_mock_service(hass, "switch", "turn_off")
+    room = _room(entry)
+    await room.async_refresh()
+    assert off == []  # read mode: nothing written
+    room.stored["control"] = True
+    await room.async_refresh()
+    assert [c.data["entity_id"] for c in off] == ["switch.sz_1_window"]

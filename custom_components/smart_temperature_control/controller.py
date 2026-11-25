@@ -239,6 +239,7 @@ class Room:
             self._cancel_verify()
             self._retries = 0
             self._sent.clear()
+        await self.async_disable_trv_window_detection()
         await self._async_apply()
         async_dispatcher_send(self.hass, SIGNAL_ROOM_UPDATED.format(self.id))
 
@@ -304,6 +305,27 @@ class Room:
             f"{self.name}: Thermostat übernimmt den Sollwert nicht ({', '.join(failed)})."
         )
         async_dispatcher_send(self.hass, SIGNAL_ROOM_UPDATED.format(self.id))
+
+    async def async_disable_trv_window_detection(self) -> None:
+        """With own window contacts, the TRVs' built-in window detection is switched off.
+
+        Otherwise a TRV may close on its own (temperature drop) and fight the
+        setpoint we send. Only writes when a switch is still on.
+        """
+        if not self.control or not self.windows:
+            return
+        for climate_id in self.thermostats:
+            for switch_id in trv.window_detection_switches(self.hass, climate_id):
+                st = self.hass.states.get(switch_id)
+                if st is None or st.state != STATE_ON:
+                    continue
+                try:
+                    await self.hass.services.async_call(
+                        "switch", "turn_off", {ATTR_ENTITY_ID: switch_id}, blocking=True
+                    )
+                    _LOGGER.info("%s: turned off TRV window detection %s", self.name, switch_id)
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.warning("%s: turning off %s failed: %s", self.name, switch_id, err)
 
     async def async_feed_external(self) -> None:
         """Write the room temperature to each TRV's external sensor input."""

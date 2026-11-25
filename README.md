@@ -51,6 +51,8 @@ Name, area, one or more thermostats (all get the same setpoint), optional temper
 | Shelly TRV | `hvac_mode: off` (Gen1) or setpoint = off temperature (BLU TRV) | External temperature via the device's number entity |
 | Generic | `hvac_mode: off` if offered, else minimum temperature | |
 
+When a room has window contacts and "Thermostate steuern" is on, the thermostats' own open-window detection is switched off (Danfoss Ally: "Interne Fenstererkennung verwenden"), so only the configured contacts decide.
+
 ## Entities
 
 House: `select` Betriebsart (Normal/Party/Urlaub), `switch` Sommerbetrieb and Wärmeerzeuger steuern, `time` Party bis, `datetime` Urlaub ab/bis, `sensor` rooms heating (attributes list eco, manual and problem rooms).

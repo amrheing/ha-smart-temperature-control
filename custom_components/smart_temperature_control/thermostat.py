@@ -86,6 +86,27 @@ def suggest_external_input(hass: HomeAssistant, climate_entity_id: str) -> str |
     return None
 
 
+# Marks a TRV's own "open window detection" switch (Danfoss Ally via ZHA:
+# window_open_feature, "Interne Fenstererkennung verwenden"). Add more brands here.
+_WINDOW_DETECTION_HINTS = ("window_open_feature", "window_detection", "open_window_detection", "fenstererkennung")
+
+
+def window_detection_switches(hass: HomeAssistant, climate_entity_id: str) -> list[str]:
+    """Switch entities on the TRV's device that turn its own window detection on/off."""
+    reg = er.async_get(hass)
+    ent = reg.async_get(climate_entity_id)
+    if ent is None or ent.device_id is None:
+        return []
+    found = []
+    for cand in er.async_entries_for_device(reg, ent.device_id):
+        if cand.domain != "switch" or cand.disabled_by is not None:
+            continue
+        text = f"{cand.entity_id} {cand.unique_id} {cand.translation_key or ''} {cand.original_name or ''}".lower().replace(" ", "_")
+        if any(h in text for h in _WINDOW_DETECTION_HINTS):
+            found.append(cand.entity_id)
+    return found
+
+
 def off_command(profile: Profile, state: State | None, off_temperature: float) -> tuple[str, dict]:
     """Service + data that switch this thermostat off."""
     modes = (state.attributes.get(ATTR_HVAC_MODES) or []) if state else []
